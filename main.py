@@ -1,6 +1,7 @@
 import os
 import cv2
 import argparse
+import json
 from api_interface.face_recognizer import FaceRecognizer
 import config
 
@@ -24,17 +25,10 @@ def enroll_from_images():
             print(f" Không tìm thấy ảnh trong: {person_path}")
             continue
 
-        first_image_path = os.path.join(person_path, images[0])
-        image = cv2.imread(first_image_path)
-        if image is None:
-            print(f" Không đọc được ảnh: {first_image_path}")
-            continue
-
         result = recognizer.enroll_from_folder(folder_path=person_path, folder_name=person)
-        if result["success"]:
-            print(f" Đã enroll: {result['id']} – {result['name']}")
-        else:
-            print(f"Lỗi khi enroll: {result.get('message', '')}")
+
+        print(f"\n Enroll: {person}")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 def recognize_from_test():
@@ -49,11 +43,8 @@ def recognize_from_test():
             continue
 
         result = recognizer.recognize(image)
-        print(f"\nTest: {file}")
-        if result["success"]:
-            print(f"Nhận diện:ID {result['id']} – Name:{result['name']} (score = {result['score']:.4f})")
-        else:
-            print(f" Người mới (score = {result['score']:.4f})")
+        print(f"\n Test: {file}")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

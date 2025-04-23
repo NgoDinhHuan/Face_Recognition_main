@@ -2,6 +2,10 @@ import os
 import json
 import cv2
 import numpy as np
+from api_interface.response_utils import build_response
+import time
+from datetime import datetime
+
 from feature.extractor import load_model, extract_feature
 from align.aligner import align_face
 from utils.faiss_index import add_to_index, search_index
@@ -62,22 +66,20 @@ class FaceRecognizer:
         avg_vector = np.mean(vectors, axis=0)
         add_to_index(folder_name, avg_vector)
 
-        #  Gán ID nếu chưa có
+        # Dùng chính vector trung bình để tính score nhận diện
+        result = search_index(avg_vector)
+        score = float(round(result["score"], 4))
+
+        # Gán ID nếu chưa có
         if folder_name not in self.id_map:
             new_id = f"{len(self.id_map) + 1:03}"
-            self.id_map[folder_name] = {"id": new_id, "name": folder_name}
+            self.id_map[folder_name] = {
+                "id": new_id,
+                "name": folder_name,
+                "confidence": score,
+                "enrolled_at": datetime.utcnow().isoformat() + "Z"
+            }
             self.save_id_map()
-
-        # Dùng lại ảnh align đầu tiên để recognize chính mình
-        score = None
-        if aligned_path and os.path.exists(aligned_path):
-            test_img = cv2.imread(aligned_path)
-            if test_img is not None:
-                test_aligned = align_face(test_img)
-                if test_aligned is not None:
-                    vector_test = extract_feature(test_aligned)
-                    result = search_index(vector_test)
-                    score = float(round(result["score"], 4))
 
         return {
             "success": True,
@@ -87,26 +89,56 @@ class FaceRecognizer:
         }
 
     def recognize(self, image: np.ndarray) -> dict:
-        aligned = align_face(image)
-        if aligned is None:
-            return {"success": False, "message": "No face detected"}
+        start_time = time.time()
 
-        vector = extract_feature(aligned)
-        result = search_index(vector)
+        try:
+            aligned = align_face(image)
+            if aligned is None:
+                return build_response(
+                    success=False,
+                    matched=False,
+                    person_id="",
+                    person_name="",
+                    confidence=0,
+                    message="No face detected"
+                )
 
-        folder_name = result["name"]
-        score = float(round(result["score"], 4))
+            vector = extract_feature(aligned)
+            result = search_index(vector)
 
-        if score >= config.THRESHOLD and folder_name in self.id_map:
-            return {
-                "success": True,
-                "id": self.id_map[folder_name]["id"],
-                "name": self.id_map[folder_name]["name"],
-                "score": score
-            }
-        else:
-            return {
-                "success": False,
-                "message": "Unknown face",
-                "score": score
-            }
+            folder_name = result["name"]
+            score = float(round(result["score"], 4))
+
+            if score >= config.THRESHOLD and folder_name in self.id_map:
+                person_id = self.id_map[folder_name]["id"]
+                person_name = self.id_map[folder_name]["name"]
+
+                response = build_response(
+                    success=True,
+                    matched=True,
+                    person_id=person_id,
+                    person_name=person_name,
+                    confidence=score
+                )
+            else:
+                response = build_response(
+                    success=True,
+                    matched=False,
+                    person_id="New_ID",
+                    person_name="",
+                    confidence=0,
+                    message="Unknown face"
+                )
+
+        except Exception:
+            response = build_response(
+                success=False,
+                matched=False,
+                person_id="",
+                person_name="",
+                confidence=0,
+                message="Error in face recognition process"
+            )
+
+        response["processing_time_ms"] = int((time.time() - start_time) * 1000)
+        return response
