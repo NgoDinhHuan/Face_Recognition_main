@@ -9,6 +9,7 @@ def add_to_index(name: str, vector: np.ndarray):
     os.makedirs(config.EMBEDDING_DIR, exist_ok=True)
     file_path = os.path.join(config.EMBEDDING_DIR, f"{name}.npy")
     np.save(file_path, vector)
+    print(f" Đã lưu vector tại: {file_path}")
 
 def load_all_embeddings():
     """Load tất cả vector từ thư mục embeddings"""
@@ -21,7 +22,6 @@ def load_all_embeddings():
     return embeddings
 
 def cosine_similarity(vec1, vec2):
-    """Tính cosine similarity giữa 2 vector"""
     dot = np.dot(vec1, vec2)
     norm1 = np.linalg.norm(vec1)
     norm2 = np.linalg.norm(vec2)

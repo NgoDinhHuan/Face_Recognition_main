@@ -1,53 +1,75 @@
-# main.py
-
 import os
 import cv2
-from feature.extractor import load_model
-from enrollment import enroll_face
-from recognition import recognize_face
+import argparse
+from api_interface.face_recognizer import FaceRecognizer
 import config
 
-def test_image(image_path):
-    if not os.path.exists(image_path):
-        print(" File không tồn tại:", image_path)
-        return
+recognizer = FaceRecognizer()
 
-    # Lấy tên người từ tên file
-    filename = os.path.basename(image_path)
-    name = os.path.splitext(filename)[0]
+def enroll_from_images():
+    image_dir = config.ORIGINAL_IMAGE_DIR
+    person_dirs = [d for d in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, d))]
 
-    # Đọc ảnh & load model
-    image = cv2.imread(image_path)
-    load_model()
+    print(f" Tổng người cần enroll: {len(person_dirs)}")
 
-    # Kiểm tra xem đã enroll chưa
-    embedding_path = os.path.join(config.EMBEDDING_DIR, f"{name}.npy")
-    if os.path.exists(embedding_path):
-        print(f"Người '{name}' đã được enroll → Bỏ qua bước enroll.")
-    else:
-        print(f"\n Enrolling '{name}'...")
-        enroll_result = enroll_face(image, name, filename)
-        print(" Enroll result:", enroll_result)
+    for person in person_dirs:
+        person_path = os.path.join(image_dir, person)
+        embed_path = os.path.join(config.EMBEDDING_DIR, f"{person}.npy")
 
-    # Recognize
-    print(f"\n🔍 Recognizing '{filename}'...")
-    recog_result = recognize_face(image)
+        if os.path.exists(embed_path):
+            continue
 
-    if recog_result["success"]:
-        print(f"Nhận diện thành công: {recog_result['name']} (score = {recog_result['score']:.4f})")
-    else:
-        print(f" Không nhận diện được. Score = {recog_result.get('score', '-')}")
+        images = [f for f in os.listdir(person_path) if f.lower().endswith((".jpg", ".png"))]
+        if not images:
+            print(f" Không tìm thấy ảnh trong: {person_path}")
+            continue
+
+        first_image_path = os.path.join(person_path, images[0])
+        image = cv2.imread(first_image_path)
+        if image is None:
+            print(f" Không đọc được ảnh: {first_image_path}")
+            continue
+
+        result = recognizer.enroll_from_folder(folder_path=person_path, folder_name=person)
+        if result["success"]:
+            print(f" Đã enroll: {result['id']} – {result['name']}")
+        else:
+            print(f"Lỗi khi enroll: {result.get('message', '')}")
+
+
+def recognize_from_test():
+    test_dir = config.TEST_IMAGE_DIR
+    files = [f for f in os.listdir(test_dir) if f.lower().endswith((".jpg", ".png"))]
+
+    for file in files:
+        image_path = os.path.join(test_dir, file)
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f" Không đọc được ảnh: {file}")
+            continue
+
+        result = recognizer.recognize(image)
+        print(f"\nTest: {file}")
+        if result["success"]:
+            print(f"Nhận diện:ID {result['id']} – Name:{result['name']} (score = {result['score']:.4f})")
+        else:
+            print(f" Người mới (score = {result['score']:.4f})")
 
 
 if __name__ == "__main__":
-    # Duyệt tất cả ảnh trong image_test/
-    test_folder = config.TEST_IMAGE_DIR
-    test_files = [f for f in os.listdir(test_folder) if f.lower().endswith(('.jpg', '.png'))]
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode",
+        choices=["enroll", "recognize", "both"],
+        default="both",
+        help="Chọn chế độ: enroll / recognize / both (mặc định: both)"
+    )
+    args = parser.parse_args()
 
-    if not test_files:
-        print(" Không có ảnh nào trong database/image_test/")
-    else:
-        for file in test_files:
-            print("\n==============================")
-            image_path = os.path.join(test_folder, file)
-            test_image(image_path)
+    if args.mode == "enroll":
+        enroll_from_images()
+    elif args.mode == "recognize":
+        recognize_from_test()
+    elif args.mode == "both":
+        enroll_from_images()
+        recognize_from_test()

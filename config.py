@@ -11,7 +11,10 @@ DATABASE_DIR = os.path.join(BASE_DIR, "database")
 ENROLL_IMAGE_DIR = os.path.join(DATABASE_DIR, "image_enroll")     
 TEST_IMAGE_DIR = os.path.join(DATABASE_DIR, "image_test")         
 ORIGINAL_IMAGE_DIR = os.path.join(DATABASE_DIR, "images")         
-EMBEDDING_DIR = os.path.join(DATABASE_DIR, "embeddings")          
+EMBEDDING_DIR = os.path.join(DATABASE_DIR, "embeddings")       
+# 
+ID_MAP_PATH = os.path.join(BASE_DIR, "database", "id_map.json")
+  
 
 # Cấu hình 
 IMAGE_SIZE = (112, 112)
