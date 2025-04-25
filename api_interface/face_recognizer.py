@@ -121,14 +121,28 @@ class FaceRecognizer:
                     confidence=score
                 )
             else:
+                # Gán ID và tên cho người lạ
+                unknown_id = f"{len(self.id_map) + 1:03}"
+                unknown_name = f"unknown_{unknown_id}"
+
+                # Ghi vào id_map.json
+                self.id_map[unknown_name] = {
+                    "id": unknown_id,
+                    "name": unknown_name,
+                    "confidence": score,
+                    "enrolled_at": datetime.utcnow().isoformat() + "Z"
+                }
+                self.save_id_map()
+
                 response = build_response(
                     success=True,
                     matched=False,
-                    person_id="New_ID",
-                    person_name="",
-                    confidence=0,
-                    message="Unknown face"
+                    person_id=unknown_id,
+                    person_name=unknown_name,
+                    confidence=score,
+                    message="Unknown face - new ID assigned"
                 )
+
 
         except Exception:
             response = build_response(
