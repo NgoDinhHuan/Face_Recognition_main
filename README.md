@@ -23,6 +23,8 @@ Face_Recognition_main/
 ├── main.py                     ← Script CLI để test
 ├── config.py                   ← Cấu hình
 └── requirements.txt
+
+
  Cách sử dụng với API ( FastAPI...)
 ✅ 1. Import class
 
