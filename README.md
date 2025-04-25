@@ -3,26 +3,6 @@ Dự án nhận diện khuôn mặt sử dụng ONNX model + MTCNN aligner + FAI
 
 ✅ Thiết kế tách biệt để API có thể dễ dàng import và sử dụng.
 
-📁 Cấu trúc thư mục
-
-Face_Recognition_main/
-├── api_interface/
-│   └── face_recognizer.py      ← Class duy nhất API cần dùng
-│   └── response_utils.py       ← Format JSON chuẩn hóa
-├── align/                      ← Căn chỉnh khuôn mặt bằng MTCNN
-├── feature/                    ← Trích xuất đặc trưng từ ảnh (ONNX model)
-├── utils/                      ← FAISS index và xử lý vector
-├── database/
-│   ├── images/                 ← Ảnh gốc mỗi người (theo folder)
-│   ├── image_enroll/           ← Ảnh đã align
-│   ├── image_test/             ← Ảnh dùng để test recognize
-│   ├── embeddings/             ← Các vector `.npy`
-│   └── id_map.json             ← Lưu id, tên, confidence, thời điểm
-├── models/
-│   └── edgeface_fp16.onnx      ← Model nhận diện
-├── main.py                     ← Script CLI để test
-├── config.py                   ← Cấu hình
-└── requirements.txt
 
 
  Cách sử dụng với API ( FastAPI...)
