@@ -4,3 +4,7 @@ onnxruntime
 Pillow
 torch
 torchvision
+fastapi
+uvicorn
+python-multipart
+pydantic
