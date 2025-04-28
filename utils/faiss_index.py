@@ -22,11 +22,11 @@ def load_all_embeddings():
                 embeddings[full_name] = vector
     return embeddings
 
-def cosine_similarity(vec1, vec2):
-    dot = np.dot(vec1, vec2)
-    norm1 = np.linalg.norm(vec1)
-    norm2 = np.linalg.norm(vec2)
-    return dot / (norm1 * norm2 + 1e-6)
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    vec1_norm = vec1 / (np.linalg.norm(vec1) + 1e-6)
+    vec2_norm = vec2 / (np.linalg.norm(vec2) + 1e-6)
+    cosine = np.dot(vec1_norm, vec2_norm)
+    return np.clip(cosine, -1.0, 1.0)
 
 def search_index(vector: np.ndarray):
     """Tìm vector giống nhất"""

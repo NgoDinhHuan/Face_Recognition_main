@@ -60,7 +60,8 @@ class FaceRecognizer:
             #  Lưu aligned theo người đó
             aligned_filename = os.path.splitext(img_file)[0] + ".jpg"
             aligned_path = os.path.join(person_image_dir, aligned_filename)
-            cv2.imwrite(aligned_path, aligned)
+            align_rgb = cv2.cvtColor(aligned, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(aligned_path, align_rgb)
 
             #   embedding theo người đó
             embedding_filename = os.path.splitext(img_file)[0] + ".npy"
