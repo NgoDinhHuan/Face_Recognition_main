@@ -30,14 +30,18 @@ class FaceRecognizer:
             json.dump(self.id_map, f, indent=2, ensure_ascii=False)
 
     def enroll_from_folder(self, folder_path: str, folder_name: str) -> dict:
-        vectors = []
         image_files = [f for f in os.listdir(folder_path) if f.lower().endswith((".jpg", ".png"))]
 
         if not image_files:
             return {"success": False, "message": f"No image in folder {folder_name}"}
 
-        aligned_saved = False
-        aligned_path = None
+        success_count = 0
+
+        #  Tạo thư mục riêng cho từng người
+        person_image_dir = os.path.join(config.ENROLL_IMAGE_DIR, folder_name)
+        person_embedding_dir = os.path.join(config.EMBEDDING_DIR, folder_name)
+        os.makedirs(person_image_dir, exist_ok=True)
+        os.makedirs(person_embedding_dir, exist_ok=True)
 
         for img_file in image_files:
             img_path = os.path.join(folder_path, img_file)
@@ -50,33 +54,35 @@ class FaceRecognizer:
                 continue
 
             vector = extract_feature(aligned)
-            vectors.append(vector)
+            if vector is None:
+                continue
 
-            # Lưu ảnh align đầu tiên
-            if not aligned_saved:
-                os.makedirs(config.ENROLL_IMAGE_DIR, exist_ok=True)
-                aligned_path = os.path.join(config.ENROLL_IMAGE_DIR, f"{folder_name}.jpg")
-                cv2.imwrite(aligned_path, aligned)
-                aligned_saved = True
+            #  Lưu aligned theo người đó
+            aligned_filename = os.path.splitext(img_file)[0] + ".jpg"
+            aligned_path = os.path.join(person_image_dir, aligned_filename)
+            cv2.imwrite(aligned_path, aligned)
 
-        if not vectors:
+            #   embedding theo người đó
+            embedding_filename = os.path.splitext(img_file)[0] + ".npy"
+            embedding_path = os.path.join(person_embedding_dir, embedding_filename)
+            np.save(embedding_path, vector)
+
+            #  Add vào FAISS
+            unique_name = f"{folder_name}_{os.path.splitext(img_file)[0]}"
+            add_to_index(unique_name, vector)
+
+            success_count += 1
+
+        if success_count == 0:
             return {"success": False, "message": f"No face detected in {folder_name}"}
 
-        # Trung bình vector
-        avg_vector = np.mean(vectors, axis=0)
-        add_to_index(folder_name, avg_vector)
-
-        # Dùng chính vector trung bình để tính score nhận diện
-        result = search_index(avg_vector)
-        score = float(round(result["score"], 4))
-
-        # Gán ID nếu chưa có
+        # Gán ID
         if folder_name not in self.id_map:
             new_id = f"{len(self.id_map) + 1:03}"
             self.id_map[folder_name] = {
                 "id": new_id,
                 "name": folder_name,
-                "confidence": score,
+                "confidence": 1.0,
                 "enrolled_at": datetime.utcnow().isoformat() + "Z"
             }
             self.save_id_map()
@@ -85,7 +91,7 @@ class FaceRecognizer:
             "success": True,
             "id": self.id_map[folder_name]["id"],
             "name": self.id_map[folder_name]["name"],
-            "score": score
+            "images_enrolled": success_count
         }
 
     def recognize(self, image: np.ndarray) -> dict:
@@ -106,7 +112,20 @@ class FaceRecognizer:
             vector = extract_feature(aligned)
             result = search_index(vector)
 
-            folder_name = result["name"]
+            if result["name"] is None:
+                return build_response(
+                    success=False,
+                    matched=False,
+                    person_id="",
+                    person_name="",
+                    confidence=0,
+                    message="No face matched"
+                )
+
+            #  Tách tên người ra
+            full_name = result["name"]  
+            folder_name = full_name.split("_")[0]  
+
             score = float(round(result["score"], 4))
 
             if score >= config.THRESHOLD and folder_name in self.id_map:
@@ -125,7 +144,6 @@ class FaceRecognizer:
                 unknown_id = f"{len(self.id_map) + 1:03}"
                 unknown_name = f"unknown_{unknown_id}"
 
-                # Ghi vào id_map.json
                 self.id_map[unknown_name] = {
                     "id": unknown_id,
                     "name": unknown_name,
@@ -143,8 +161,8 @@ class FaceRecognizer:
                     message="Unknown face - new ID assigned"
                 )
 
-
-        except Exception:
+        except Exception as e:
+            print(f" Error during recognition: {e}")
             response = build_response(
                 success=False,
                 matched=False,

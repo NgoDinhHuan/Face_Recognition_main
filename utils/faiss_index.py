@@ -1,24 +1,25 @@
-# utils/faiss_index.py
-
 import os
 import numpy as np
 import config
 
+# Biến toàn cục để giữ embeddings trong RAM
+index_embeddings = {}
+
 def add_to_index(name: str, vector: np.ndarray):
-    """Lưu vector (128D) vào file npy theo tên"""
-    os.makedirs(config.EMBEDDING_DIR, exist_ok=True)
-    file_path = os.path.join(config.EMBEDDING_DIR, f"{name}.npy")
-    np.save(file_path, vector)
-    print(f" Đã lưu vector tại: {file_path}")
+    """Thêm vector vào index (RAM), không lưu ra file"""
+    index_embeddings[name] = vector
 
 def load_all_embeddings():
-    """Load tất cả vector từ thư mục embeddings"""
+    """Load tất cả vector từ thư mục embeddings (đệ quy trong các folder con)"""
     embeddings = {}
-    for fname in os.listdir(config.EMBEDDING_DIR):
-        if fname.endswith(".npy"):
-            name = os.path.splitext(fname)[0]
-            vector = np.load(os.path.join(config.EMBEDDING_DIR, fname))
-            embeddings[name] = vector
+    for root, dirs, files in os.walk(config.EMBEDDING_DIR):
+        for fname in files:
+            if fname.endswith(".npy"):
+                name = os.path.splitext(fname)[0]
+                vector = np.load(os.path.join(root, fname))
+                folder_name = os.path.basename(root)
+                full_name = f"{folder_name}_{name}"
+                embeddings[full_name] = vector
     return embeddings
 
 def cosine_similarity(vec1, vec2):
@@ -29,11 +30,15 @@ def cosine_similarity(vec1, vec2):
 
 def search_index(vector: np.ndarray):
     """Tìm vector giống nhất"""
-    embeddings = load_all_embeddings()
+    if not index_embeddings:
+        loaded = load_all_embeddings()
+        for name, vec in loaded.items():
+            index_embeddings[name] = vec
+
     best_score = -1
     best_name = None
 
-    for name, vec in embeddings.items():
+    for name, vec in index_embeddings.items():
         score = cosine_similarity(vector, vec)
         if score > best_score:
             best_score = score

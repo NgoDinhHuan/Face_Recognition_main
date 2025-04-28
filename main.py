@@ -11,25 +11,23 @@ def enroll_from_images():
     image_dir = config.ORIGINAL_IMAGE_DIR
     person_dirs = [d for d in os.listdir(image_dir) if os.path.isdir(os.path.join(image_dir, d))]
 
-    print(f" Tổng người cần enroll: {len(person_dirs)}")
+    print(f" Tổng số người cần enroll: {len(person_dirs)}")
 
     for person in person_dirs:
-        person_path = os.path.join(image_dir, person)
-        embed_path = os.path.join(config.EMBEDDING_DIR, f"{person}.npy")
+        person_embedding_folder = os.path.join(config.EMBEDDING_DIR, person)
 
-        if os.path.exists(embed_path):
+        #  Nếu người này đã có folder embeddings --> bỏ qua
+        if os.path.exists(person_embedding_folder) and os.listdir(person_embedding_folder):
             continue
 
+        person_path = os.path.join(image_dir, person)
         images = [f for f in os.listdir(person_path) if f.lower().endswith((".jpg", ".png"))]
+
         if not images:
             print(f" Không tìm thấy ảnh trong: {person_path}")
             continue
 
         result = recognizer.enroll_from_folder(folder_path=person_path, folder_name=person)
-
-        print(f"\n Enroll: {person}")
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-
 
 def recognize_from_test():
     test_dir = config.TEST_IMAGE_DIR
@@ -43,7 +41,7 @@ def recognize_from_test():
             continue
 
         result = recognizer.recognize(image)
-        print(f"\n Test: {file}")
+        print(f"\n  Test: {file}")
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
@@ -52,15 +50,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         choices=["enroll", "recognize", "both"],
-        default="both",
+        default="both", 
         help="Chọn chế độ: enroll / recognize / both (mặc định: both)"
     )
     args = parser.parse_args()
 
     if args.mode == "enroll":
         enroll_from_images()
+
     elif args.mode == "recognize":
+        enroll_from_images() 
         recognize_from_test()
+
     elif args.mode == "both":
         enroll_from_images()
         recognize_from_test()
