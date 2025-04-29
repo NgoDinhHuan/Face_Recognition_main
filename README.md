@@ -59,7 +59,7 @@ folder_path là thư mục chứa nhiều ảnh .jpg hoặc .png
   },
   "processing_time_ms": 129
 }
-❌ Lỗi xử lý (không detect được mặt):
+ Lỗi xử lý (không detect được mặt):
 
 {
   "success": false,
@@ -82,7 +82,7 @@ folder_path là thư mục chứa nhiều ảnh .jpg hoặc .png
     "enrolled_at": "2025-04-23T15:15:30Z"
   }
 }
-⚙️ Cài đặt thư viện
+⚙ Cài đặt thư viện
 bash
 Sao chép
 Chỉnh sửa
