@@ -128,6 +128,7 @@ class FaceRecognizer:
             folder_name = full_name.split("_")[0]  
 
             score = float(round(result["score"], 4))
+            score = np.clip(score, -1.0, 1.0)  
 
             if score >= config.THRESHOLD and folder_name in self.id_map:
                 person_id = self.id_map[folder_name]["id"]
