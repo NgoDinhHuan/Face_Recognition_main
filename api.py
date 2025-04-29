@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from typing import List, Optional
 import tempfile
 from pydantic import BaseModel
+import time
+from datetime import datetime
 
 from api_interface.face_recognizer import FaceRecognizer
 
@@ -39,36 +41,76 @@ class RecognizeResponse(BaseModel):
     result: Optional[dict] = None
     processing_time_ms: int
 
+class MultiRecognizeResponse(BaseModel):
+    request_id: str
+    timestamp: str
+    success: bool
+    message: Optional[str] = ""
+    results: List[dict]
+    total_processing_time_ms: int
+
 @app.get("/")
 async def root():
     return {"message": "API Nhận Diện Khuôn Mặt v1.0"}
 
-@app.post("/recognize", response_model=RecognizeResponse)
-async def recognize_face(file: UploadFile = File(...)):
+@app.post("/recognize", response_model=MultiRecognizeResponse)
+async def recognize_face(files: List[UploadFile] = File(...)):
     """
-    Nhận diện khuôn mặt từ ảnh
+    Nhận diện khuôn mặt từ nhiều ảnh
     
-    - **file**: Tệp ảnh (jpg, png)
-    - **Trả về**: Thông tin người được nhận diện hoặc gán ID mới nếu là người lạ
+    - **files**: Danh sách tệp ảnh (jpg, png)
+    - **Trả về**: Thông tin người được nhận diện cho từng ảnh
     """
-    if not file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file ảnh .jpg hoặc .png")
+    if not files:
+        raise HTTPException(status_code=400, detail="Cần ít nhất 1 ảnh để nhận diện")
     
-    try:
-        # Đọc ảnh từ file tạm
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if image is None:
-            raise HTTPException(status_code=400, detail="Không thể đọc ảnh")
-        
-        # Nhận diện khuôn mặt
-        result = recognizer.recognize(image)
-        return result
+    start_time = time.time()
+    results = []
     
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi xử lý: {str(e)}")
+    for file in files:
+        if not file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "message": "Chỉ hỗ trợ file ảnh .jpg hoặc .png"
+            })
+            continue
+        
+        try:
+            # Đọc ảnh từ file tạm
+            contents = await file.read()
+            nparr = np.frombuffer(contents, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            if image is None:
+                results.append({
+                    "filename": file.filename,
+                    "success": False,
+                    "message": "Không thể đọc ảnh"
+                })
+                continue
+            
+            # Nhận diện khuôn mặt
+            result = recognizer.recognize(image)
+            result["filename"] = file.filename
+            results.append(result)
+            
+        except Exception as e:
+            results.append({
+                "filename": file.filename,
+                "success": False,
+                "message": f"Lỗi xử lý: {str(e)}"
+            })
+    
+    total_time = int((time.time() - start_time) * 1000)
+    
+    return {
+        "request_id": str(uuid.uuid4()),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "success": any(r.get("success", False) for r in results),
+        "results": results,
+        "total_processing_time_ms": total_time
+    }
 
 @app.post("/enroll")
 async def enroll_face(
