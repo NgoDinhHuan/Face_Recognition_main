@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  face_recognition:
+    build: .
+    container_name: face_recognition_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./database:/app/database
+      - ./models:/app/models
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    restart: unless-stopped 
