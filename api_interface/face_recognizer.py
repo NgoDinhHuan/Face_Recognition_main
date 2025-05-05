@@ -97,9 +97,14 @@ class FaceRecognizer:
 
     def recognize(self, image: np.ndarray) -> dict:
         start_time = time.time()
+        detailed = {}  # để lưu breakdown timings
 
         try:
+            # 1. Phát hiện và căn chỉnh mặt
+            t0 = time.time()
             aligned = align_face(image)
+            detailed['detection_ms'] = int((time.time() - t0) * 1000)
+
             if aligned is None:
                 return build_response(
                     success=False,
@@ -110,8 +115,15 @@ class FaceRecognizer:
                     message="No face detected"
                 )
 
+            # 2. Trích xuất đặc trưng
+            t1 = time.time()
             vector = extract_feature(aligned)
+            detailed['embedding_ms'] = int((time.time() - t1) * 1000)
+
+            # 3. Tìm kiếm trong FAISS
+            t2 = time.time()
             result = search_index(vector)
+            detailed['search_ms'] = int((time.time() - t2) * 1000)
 
             if result["name"] is None:
                 return build_response(
@@ -123,17 +135,18 @@ class FaceRecognizer:
                     message="No face matched"
                 )
 
-            #  Tách tên người ra
-            full_name = result["name"]  
-            folder_name = full_name.split("_")[0]  
+            # 4. Tách tên và xử lý match/unknown
+            t3 = time.time()
+
+            full_name = result["name"]
+            folder_name = full_name.split("_")[0]
 
             score = float(round(result["score"], 4))
-            score = np.clip(score, -1.0, 1.0)  
+            score = np.clip(score, -1.0, 1.0)
 
             if score >= config.THRESHOLD and folder_name in self.id_map:
-                person_id = self.id_map[folder_name]["id"]
+                person_id   = self.id_map[folder_name]["id"]
                 person_name = self.id_map[folder_name]["name"]
-
                 response = build_response(
                     success=True,
                     matched=True,
@@ -142,26 +155,25 @@ class FaceRecognizer:
                     confidence=score
                 )
             else:
-                # Gán ID và tên cho người lạ
-                unknown_id = f"{len(self.id_map) + 1:03}"
+                unknown_id   = f"{len(self.id_map) + 1:03}"
                 unknown_name = f"unknown_{unknown_id}"
-
                 self.id_map[unknown_name] = {
                     "id": unknown_id,
                     "name": unknown_name,
-                    "confidence": score,
+                    "confidence": 0,
                     "enrolled_at": datetime.utcnow().isoformat() + "Z"
                 }
                 self.save_id_map()
-
                 response = build_response(
                     success=True,
                     matched=False,
                     person_id=unknown_id,
                     person_name=unknown_name,
-                    confidence=score,
+                    confidence=0,
                     message="Unknown face - new ID assigned"
                 )
+
+            detailed['postprocess_ms'] = int((time.time() - t3) * 1000)
 
         except Exception as e:
             print(f" Error during recognition: {e}")
@@ -174,5 +186,11 @@ class FaceRecognizer:
                 message="Error in face recognition process"
             )
 
-        response["processing_time_ms"] = int((time.time() - start_time) * 1000)
+        # --- gán tổng thời gian và detailed breakdown ---
+        total_ms = int((time.time() - start_time) * 1000)
+        detailed['total_ms']            = total_ms
+        response["detailed_timings_ms"] = detailed
+
         return response
+
+

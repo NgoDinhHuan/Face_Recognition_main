@@ -13,5 +13,4 @@ def build_response(success: bool, matched: bool, person_id: str = "", person_nam
             "person_name": person_name,
             "confidence": round(confidence, 3)
         },
-        "processing_time_ms": 0
     }
