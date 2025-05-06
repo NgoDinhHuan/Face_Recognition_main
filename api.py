@@ -6,6 +6,7 @@ import cv2
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import RedirectResponse
 from typing import List, Optional
 import tempfile
 from pydantic import BaseModel
@@ -49,9 +50,9 @@ class MultiRecognizeResponse(BaseModel):
     results: List[dict]
     total_processing_time_ms: int
 
-@app.get("/")
-async def root():
-    return {"message": "API Nhận Diện Khuôn Mặt v1.0"}
+@app.get("/", include_in_schema=False)
+async def redirect_to_docs():
+    return RedirectResponse(url="/docs")
 
 @app.post("/recognize", response_model=MultiRecognizeResponse)
 async def recognize_face(files: List[UploadFile] = File(...)):
