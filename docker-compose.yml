@@ -11,4 +11,27 @@ services:
       - ./models:/app/models
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-    restart: unless-stopped 
+      - MILVUS_HOST=standalone
+      - MILVUS_PORT=19530
+    networks:
+      - milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest  # Thêm thụt lề tại đây
+    command: http face_recognition_api:8000
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    depends_on:
+      - face_recognition
+    networks:
+      - milvus
+
+networks:
+  milvus:
+    external: true

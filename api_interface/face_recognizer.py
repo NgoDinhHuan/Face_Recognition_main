@@ -9,6 +9,7 @@ from datetime import datetime
 from feature.extractor import load_model, extract_feature
 from align.aligner import align_face
 from utils.faiss_index import add_to_index, search_index
+from utils.milvus_client import insert_embedding, search_embedding
 import config
 from config import ID_MAP_PATH
 
@@ -64,13 +65,15 @@ class FaceRecognizer:
             cv2.imwrite(aligned_path, align_rgb)
 
             #   embedding theo người đó
-            embedding_filename = os.path.splitext(img_file)[0] + ".npy"
-            embedding_path = os.path.join(person_embedding_dir, embedding_filename)
-            np.save(embedding_path, vector)
+            # embedding_filename = os.path.splitext(img_file)[0] + ".npy"
+            # embedding_path = os.path.join(person_embedding_dir, embedding_filename)
+            # np.save(embedding_path, vector)
 
             #  Add vào FAISS
             unique_name = f"{folder_name}_{os.path.splitext(img_file)[0]}"
             add_to_index(unique_name, vector)
+            # Thêm vào Milvus
+            insert_embedding(vector.tolist(), unique_name)
 
             success_count += 1
 
@@ -120,12 +123,48 @@ class FaceRecognizer:
             vector = extract_feature(aligned)
             detailed['embedding_ms'] = int((time.time() - t1) * 1000)
 
-            # 3. Tìm kiếm trong FAISS
+            # 3. Tìm kiếm trong Milvus
             t2 = time.time()
-            result = search_index(vector)
+            milvus_result = search_embedding(vector.tolist(), top_k=1)
             detailed['search_ms'] = int((time.time() - t2) * 1000)
 
-            if result["name"] is None:
+            t3 = time.time()
+
+            if milvus_result and milvus_result["name"] is not None:
+                full_name = milvus_result["name"]
+                score = float(round(milvus_result["score"], 4))
+                score = np.clip(score, -1.0, 1.0)
+                folder_name = full_name.split("_")[0]
+                if score >= config.THRESHOLD and folder_name in self.id_map:
+                    person_id   = self.id_map[folder_name]["id"]
+                    person_name = self.id_map[folder_name]["name"]
+                    response = build_response(
+                        success=True,
+                        matched=True,
+                        person_id=person_id,
+                        person_name=person_name,
+                        confidence=score
+                    )
+                else:
+                    unknown_id   = f"{len(self.id_map) + 1:03}"
+                    unknown_name = f"unknown_{unknown_id}"
+                    self.id_map[unknown_name] = {
+                        "id": unknown_id,
+                        "name": unknown_name,
+                        "confidence": 0,
+                        "enrolled_at": datetime.utcnow().isoformat() + "Z"
+                    }
+                    self.save_id_map()
+                    response = build_response(
+                        success=True,
+                        matched=False,
+                        person_id=unknown_id,
+                        person_name=unknown_name,
+                        confidence=0,
+                        message="Unknown face - new ID assigned"
+                    )
+                detailed['postprocess_ms'] = int((time.time() - t3) * 1000)
+            else:
                 return build_response(
                     success=False,
                     matched=False,
@@ -134,46 +173,6 @@ class FaceRecognizer:
                     confidence=0,
                     message="No face matched"
                 )
-
-            # 4. Tách tên và xử lý match/unknown
-            t3 = time.time()
-
-            full_name = result["name"]
-            folder_name = full_name.split("_")[0]
-
-            score = float(round(result["score"], 4))
-            score = np.clip(score, -1.0, 1.0)
-
-            if score >= config.THRESHOLD and folder_name in self.id_map:
-                person_id   = self.id_map[folder_name]["id"]
-                person_name = self.id_map[folder_name]["name"]
-                response = build_response(
-                    success=True,
-                    matched=True,
-                    person_id=person_id,
-                    person_name=person_name,
-                    confidence=score
-                )
-            else:
-                unknown_id   = f"{len(self.id_map) + 1:03}"
-                unknown_name = f"unknown_{unknown_id}"
-                self.id_map[unknown_name] = {
-                    "id": unknown_id,
-                    "name": unknown_name,
-                    "confidence": 0,
-                    "enrolled_at": datetime.utcnow().isoformat() + "Z"
-                }
-                self.save_id_map()
-                response = build_response(
-                    success=True,
-                    matched=False,
-                    person_id=unknown_id,
-                    person_name=unknown_name,
-                    confidence=0,
-                    message="Unknown face - new ID assigned"
-                )
-
-            detailed['postprocess_ms'] = int((time.time() - t3) * 1000)
 
         except Exception as e:
             print(f" Error during recognition: {e}")

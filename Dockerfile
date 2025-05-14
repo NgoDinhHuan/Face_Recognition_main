@@ -19,9 +19,13 @@ RUN pip install --upgrade pip \
 # Copy toàn bộ source và model
 COPY . .
 # Nếu muốn tách riêng: COPY models/edgeface_fp16.onnx /app/models/
- 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Expose cổng ứng dụng
 EXPOSE 8000
  
 # Lệnh khởi chạy
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 CMD ["python", "run_with_ngrok.py"]

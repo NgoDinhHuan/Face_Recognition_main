@@ -1,4 +1,5 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import shutil
 import uuid
 import numpy as np
@@ -12,8 +13,17 @@ import tempfile
 from pydantic import BaseModel
 import time
 from datetime import datetime
+import logging
 
 from api_interface.face_recognizer import FaceRecognizer
+from utils.milvus_client import get_connection
+
+# Cấu hình logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="API Nhận Diện Khuôn Mặt",
@@ -49,6 +59,33 @@ class MultiRecognizeResponse(BaseModel):
     message: Optional[str] = ""
     results: List[dict]
     total_processing_time_ms: int
+
+@app.get("/health")
+async def health_check():
+    """Kiểm tra trạng thái của API và Milvus"""
+    try:
+        # Kiểm tra kết nối Milvus
+        milvus_status = get_connection()
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "services": {
+                "api": "up",
+                "milvus": "up" if milvus_status else "down"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "services": {
+                "api": "up",
+                "milvus": "down"
+            },
+            "error": str(e)
+        }
 
 @app.get("/", include_in_schema=False)
 async def redirect_to_docs():
