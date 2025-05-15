@@ -95,6 +95,34 @@ hoặc
 uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### 4. Public API ra Internet với Ngrok
+
+Bạn có thể sử dụng Ngrok để public API ra ngoài internet (dùng cho demo, test nhanh, không khuyến nghị cho production).
+
+#### 4.1. Cài đặt pyngrok
+```bash
+pip install pyngrok
+```
+
+#### 4.2. Chạy API với Ngrok
+```bash
+python run_with_ngrok.py
+```
+Sau khi chạy, terminal sẽ hiển thị một đường dẫn public (dạng https://xxxx.ngrok.io). Bạn có thể truy cập API và API docs qua link này.
+
+- Đường dẫn API: `https://xxxx.ngrok.io`
+- Đường dẫn docs: `https://xxxx.ngrok.io/docs`
+
+#### 4.3. Ý nghĩa file run_with_ngrok.py
+- Tự động khởi động ngrok tunnel cho cổng 8000
+- In ra public URL
+- Khởi động FastAPI server
+- Khi dừng server, ngrok cũng tự dừng
+
+**Lưu ý bảo mật:**
+- Không dùng ngrok cho môi trường production hoặc dữ liệu nhạy cảm
+- Chỉ dùng cho mục đích demo, thử nghiệm, chia sẻ nhanh
+
 ### 4. API Endpoints
 
 #### 4.1. Nhận diện khuôn mặt
@@ -293,16 +321,137 @@ docker run --rm -v $(pwd)/volumes/milvus:/milvus_data -v $(pwd)/backup:/backup a
 4. Push lên branch
 5. Tạo Pull Request
 
+## Troubleshooting (Khắc phục sự cố)
+
+### 1. Lỗi cài đặt thư viện
+- **Lỗi thiếu thư viện:**
+  - Chạy lại: `pip install -r requirements.txt`
+- **Lỗi version không tương thích:**
+  - Kiểm tra Python >= 3.8, upgrade pip: `pip install --upgrade pip`
+
+### 2. Lỗi khi chạy Docker/Milvus
+- **Milvus không khởi động:**
+  - Kiểm tra RAM >= 4GB, chạy lại: `docker-compose -f docker-compose-milvus.yml up -d`
+  - Xem log: `docker-compose -f docker-compose-milvus.yml logs -f`
+- **API không kết nối được Milvus:**
+  - Kiểm tra biến môi trường `MILVUS_HOST`, `MILVUS_PORT`
+  - Đảm bảo Milvus đã chạy trước khi start API
+
+### 3. Lỗi CUDA/GPU
+- **Lỗi CUDA/cuDNN:**
+  - Đảm bảo đã cài đúng driver GPU, CUDA, cuDNN
+  - Nếu không dùng GPU, cài onnxruntime bản CPU: `pip install onnxruntime`
+
+### 4. Lỗi file lớn khi push lên GitHub
+- **Cảnh báo file > 50MB:**
+  - Xóa file lớn khỏi git: `git rm --cached <file>`
+  - Dùng [Git LFS](https://git-lfs.github.com/) cho file lớn
+
+### 5. Lỗi khi sử dụng Ngrok
+- **Không tạo được public URL:**
+  - Kiểm tra kết nối internet
+  - Đảm bảo chưa có process nào chiếm port 8000
+- **API không truy cập được từ ngoài:**
+  - Kiểm tra firewall, thử lại với mạng khác
+
+### 6. Lỗi nhận diện/đăng ký khuôn mặt
+- **Không detect được mặt:**
+  - Kiểm tra ảnh đầu vào (đúng định dạng, rõ mặt)
+  - Thử với ảnh khác
+- **Kết quả nhận diện sai:**
+  - Đảm bảo đã enroll đủ ảnh chất lượng cho mỗi người
+  - Kiểm tra lại ngưỡng `THRESHOLD` trong config.py
+
+### 7. Lỗi khác
+- **API báo lỗi 500/503:**
+  - Xem log API: `docker-compose logs -f api` hoặc log terminal
+  - Kiểm tra lại cấu hình, thư viện, kết nối Milvus
+
+Nếu gặp lỗi không nằm trong danh sách trên, hãy kiểm tra log chi tiết và liên hệ để được hỗ trợ thêm.
+
 ## License
 MIT License
-
-## Contact
-- Email: [your-email]
-- GitHub: [your-github]
 
 ## Acknowledgments
 - ONNX Runtime
 - MTCNN
 - Milvus
 - FastAPI
+
+## Mô tả chi tiết các method chính
+
+### 1. FaceRecognizer (api_interface/face_recognizer.py)
+
+#### __init__(self)
+- Khởi tạo class, load model nhận diện và đọc file id_map nếu có.
+
+#### save_id_map(self)
+- Lưu thông tin id_map (mapping giữa tên và ID) ra file JSON.
+
+#### enroll_from_folder(self, folder_path: str, folder_name: str) -> dict
+- Đăng ký khuôn mặt cho một người từ thư mục ảnh.
+- **Tham số:**
+  - `folder_path`: Đường dẫn thư mục chứa ảnh của một người.
+  - `folder_name`: Tên người (dùng làm key).
+- **Trả về:** dict thông tin đăng ký (success, id, name, images_enrolled).
+- **Mô tả:**
+  - Align từng ảnh, trích xuất vector đặc trưng, lưu vào FAISS & Milvus, cập nhật id_map.
+
+#### recognize(self, image: np.ndarray) -> dict
+- Nhận diện khuôn mặt từ ảnh numpy array.
+- **Tham số:**
+  - `image`: Ảnh đầu vào dạng numpy array (BGR).
+- **Trả về:** dict kết quả nhận diện (success, matched, person_id, person_name, confidence, ...).
+- **Mô tả:**
+  - Align ảnh, trích xuất vector, tìm kiếm trong Milvus, trả về thông tin người nhận diện hoặc unknown.
+
+### 2. Các API endpoint (api.py)
+
+#### POST /recognize
+- Nhận diện khuôn mặt từ nhiều ảnh (multipart/form-data).
+- **Tham số:** files (danh sách ảnh)
+- **Trả về:** Thông tin nhận diện cho từng ảnh (MultiRecognizeResponse)
+
+#### POST /enroll
+- Đăng ký khuôn mặt mới.
+- **Tham số:** files (danh sách ảnh), person_name (tên người)
+- **Trả về:** Thông tin đăng ký (id, name, images_enrolled)
+
+#### GET /database
+- Lấy danh sách người đã đăng ký.
+
+#### GET /health
+- Kiểm tra trạng thái API và Milvus.
+
+### 3. Một số method hỗ trợ quan trọng
+
+#### align_face(image: np.ndarray) -> np.ndarray (align/aligner.py)
+- Căn chỉnh khuôn mặt về kích thước chuẩn (112x112), trả về ảnh đã align hoặc None nếu không phát hiện được mặt.
+
+#### extract_feature(image: np.ndarray) -> np.ndarray (feature/extractor.py)
+- Trích xuất vector đặc trưng từ ảnh khuôn mặt đã align.
+
+#### add_to_index(name: str, vector: np.ndarray) (utils/faiss_index.py)
+- Thêm vector đặc trưng vào FAISS index để tìm kiếm nhanh.
+
+#### search_embedding(vector: list, top_k=1) (utils/milvus_client.py)
+- Tìm kiếm vector gần nhất trong Milvus, trả về thông tin người gần nhất.
+
+---
+
+**Ví dụ sử dụng FaceRecognizer trong Python:**
+```python
+from api_interface.face_recognizer import FaceRecognizer
+import cv2
+
+recognizer = FaceRecognizer()
+
+# Đăng ký khuôn mặt
+result = recognizer.enroll_from_folder('data/john_doe', 'john_doe')
+print(result)
+
+# Nhận diện khuôn mặt
+img = cv2.imread('test.jpg')
+result = recognizer.recognize(img)
+print(result)
 
